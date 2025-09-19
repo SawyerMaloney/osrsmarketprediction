@@ -1,1 +1,51 @@
-{"385": {"avgHighPrice": 791, "highPriceVolume": 78706, "avgLowPrice": 772, "lowPriceVolume": 72837, "timestamp": 1758258000}, "560": {"avgHighPrice": 151, "highPriceVolume": 1710693, "avgLowPrice": 146, "lowPriceVolume": 364551, "timestamp": 1758258000}, "561": {"avgHighPrice": 102, "highPriceVolume": 174581, "avgLowPrice": 100, "lowPriceVolume": 269493, "timestamp": 1758258000}, "565": {"avgHighPrice": 237, "highPriceVolume": 750165, "avgLowPrice": 233, "lowPriceVolume": 562331, "timestamp": 1758258000}, "2434": {"avgHighPrice": 11029, "highPriceVolume": 35930, "avgLowPrice": 10852, "lowPriceVolume": 8448, "timestamp": 1758258000}, "3024": {"avgHighPrice": 16110, "highPriceVolume": 23367, "avgLowPrice": 15803, "lowPriceVolume": 17050, "timestamp": 1758258000}, "12934": {"avgHighPrice": 218, "highPriceVolume": 868261, "avgLowPrice": 213, "lowPriceVolume": 489879, "timestamp": 1758258000}}
+{
+    "385": {
+        "avgHighPrice": 791,
+        "highPriceVolume": 78706,
+        "avgLowPrice": 772,
+        "lowPriceVolume": 72837,
+        "timestamp": 1758258000
+    },
+    "560": {
+        "avgHighPrice": 151,
+        "highPriceVolume": 1710693,
+        "avgLowPrice": 146,
+        "lowPriceVolume": 364551,
+        "timestamp": 1758258000
+    },
+    "561": {
+        "avgHighPrice": 102,
+        "highPriceVolume": 174581,
+        "avgLowPrice": 100,
+        "lowPriceVolume": 269493,
+        "timestamp": 1758258000
+    },
+    "565": {
+        "avgHighPrice": 237,
+        "highPriceVolume": 750165,
+        "avgLowPrice": 233,
+        "lowPriceVolume": 562331,
+        "timestamp": 1758258000
+    },
+    "2434": {
+        "avgHighPrice": 11029,
+        "highPriceVolume": 35930,
+        "avgLowPrice": 10852,
+        "lowPriceVolume": 8448,
+        "timestamp": 1758258000
+    },
+    "3024": {
+        "avgHighPrice": 16110,
+        "highPriceVolume": 23367,
+        "avgLowPrice": 15803,
+        "lowPriceVolume": 17050,
+        "timestamp": 1758258000
+    },
+    "12934": {
+        "avgHighPrice": 218,
+        "highPriceVolume": 868261,
+        "avgLowPrice": 213,
+        "lowPriceVolume": 489879,
+        "timestamp": 1758258000
+    }
+}

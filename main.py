@@ -3,6 +3,7 @@ import time
 from typing import Dict, Any, Optional
 import json
 import numpy as np
+import matplotlib.pyplot as plt
 
 class RuneScapePricesAPI:
     """
@@ -202,16 +203,65 @@ class RuneScapePricesAPI:
         """
         self.item_timeseries = self.item_timeseries[:, :, :4]
 
-    def load_clean_convert_normalize(self):
+    def load_clean_convert(self):
         self.load_data()
         self.clean_data()
         self.convert_timeseries_to_numpy()
         self.remove_timestamp()
-        self.normalize_data()
         self.save_numpy()
 
 if __name__ == "__main__":
     api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
-    api.load_clean_convert_normalize()
     api.load_numpy("timeseries.npy")
     print(api.item_timeseries[:10])
+    print(api.item_timeseries.shape)
+
+    arr = api.item_timeseries
+
+    item_idx = 0  # first tracked item
+    feature_idx = 0  # choose the feature you care about, e.g., price
+
+    # Extract the series
+    series = arr[:, item_idx, feature_idx]  # shape (timesteps,)
+
+    # -------------------------
+    # 1. Plot the entire series
+    # -------------------------
+    plt.figure(figsize=(15, 4))
+    plt.plot(series, label=f"Item {item_idx}, Feature {feature_idx}")
+    plt.title("Full Timeseries")
+    plt.xlabel("Timestep (hourly)")
+    plt.ylabel("Value")
+    plt.legend()
+    plt.show()
+
+    # -------------------------
+    # 2. Plot a zoomed-in portion (optional)
+    # -------------------------
+    start, end = 6500, 6800  # adjust to zoom into a specific window
+    plt.figure(figsize=(15, 4))
+    plt.plot(series[start:end], label=f"Zoomed: {start}–{end}")
+    plt.title("Zoomed Timeseries")
+    plt.xlabel("Timestep")
+    plt.ylabel("Value")
+    plt.legend()
+    plt.show()
+
+    # -------------------------
+    # 3. Plot histogram to see distribution
+    # -------------------------
+    plt.figure(figsize=(8, 4))
+    plt.hist(series, bins=100)
+    plt.title("Histogram of Timeseries Values")
+    plt.xlabel("Value")
+    plt.ylabel("Frequency")
+    plt.show()
+
+    start, end = 4300, 4500  # adjust to match a suspected spike
+    plt.figure(figsize=(15, 4))
+    plt.plot(series[start:end], label=f"Item 0, Feature 0 Zoom")
+    plt.title("Zoomed Timeseries Around Spike")
+    plt.xlabel("Timestep")
+    plt.ylabel("Value")
+    plt.legend()
+    plt.show()

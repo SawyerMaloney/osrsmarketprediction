@@ -2,27 +2,59 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
+import itertools
 
 class TimeSeriesDataset(Dataset):
-    def __init__(self, arr, seq_len=32, horizon=5):
+    def __init__(self, arr, seq_len=32, horizon=5, target_scale=100.0, clip_inputs=True, clip_value=5.0):
         """
         arr: numpy array of shape (timesteps, items, features)
         seq_len: how many past steps to feed into the model
         """
-        self.arr = arr
+        self.arr = arr.astype(np.float32)
         self.seq_len = seq_len
         self.horizon = horizon
 
-        # Use first item's first feature as price series
-        prices = arr[:, 0, 0]  # shape: (timesteps,)
-        self.log_returns = np.diff(np.log(prices + 1e-8), prepend=np.nan)  # avoid log(0)
+        # compute log returns for target
+        # with unnormalized data
+        prices = self.arr[:, 0, 0]
+        prices = np.clip(prices, a_min=1e-8, a_max=None)
+        log_prices = np.log(prices)
+        self.log_returns = np.diff(log_prices, prepend=log_prices[0])
 
+        # multiply log returns by constant
+        self.log_returns *= target_scale
+
+        self.log_returns = np.clip(self.log_returns, -5*target_scale, 5*target_scale)
+
+        # normalize input features
+        # compute mean/std across timesteps and items for each feature
+        timesteps, items, features = self.arr.shape
+        arr_2d = self.arr.reshape(-1, features)
+        mean = arr_2d.std(axis=0) + 1e-8
+        std = arr_2d.std(axis=0) + 1e-8
+        arr_normalized = (arr_2d - mean) / std
+        arr_normalized = arr_normalized.reshape(timesteps, items, features)
+
+        # Optional clipping to remove extreme outliers
+        if clip_inputs:
+            arr_normalized = np.clip(arr_normalized, -clip_value, clip_value)
+
+        self.arr = arr_normalized
+        
     def __len__(self):
         return len(self.arr) - self.seq_len - self.horizon + 1
 
     def __getitem__(self, idx):
         x = self.arr[idx:idx+self.seq_len]
         y = self.log_returns[idx+self.seq_len + (self.horizon-1)]
+
+        # Runtime checks
+        if torch.isnan(torch.tensor(x)).any() or torch.isnan(torch.tensor(y)):
+            print(f"[WARNING] NaN detected in batch idx {idx}")
+        if torch.isinf(torch.tensor(x)).any() or torch.isinf(torch.tensor(y)):
+            print(f"[WARNING] Inf detected in batch idx {idx}")
+
+
         return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
 
 
@@ -69,23 +101,12 @@ model = LSTMModel(input_size)
 model = model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 criterion = nn.MSELoss()
-
-# Training loop
+# Training loop with target stats monitoring
 for epoch in range(30):
     model.train()
     train_loss = 0
     for batch_idx, (x, y) in enumerate(train_loader):
-        if torch.isnan(x).any() or torch.isnan(y).any():
-            print(f"NaNs in batch {batch_idx}")
-        if torch.isinf(x).any() or torch.isinf(y).any():
-            print(f"Infs in batch {batch_idx}")
-        print(f"x stats: min={x.min().item():.3f}, max={x.max().item():.3f}, mean={x.mean().item():.3f}")
-        print(f"y stats: min={y.min().item():.3f}, max={y.max().item():.3f}, mean={y.mean().item():.3f}")
-        break  # only first batch for inspection
-
-    for x, y in train_loader:
-        x = x.to(device)
-        y = y.to(device)
+        x, y = x.to(device), y.to(device)
         optimizer.zero_grad()
         preds = model(x)
         loss = criterion(preds, y)
@@ -93,14 +114,27 @@ for epoch in range(30):
         optimizer.step()
         train_loss += loss.item() * len(x)
 
-    # Eval
+        # Runtime monitoring of targets and predictions
+        if batch_idx == 0:  # only first batch to avoid too much output
+            print(f"Batch {batch_idx} | x min {x.min():.3f}, max {x.max():.3f}, mean {x.mean():.3f}")
+            print(f"Batch {batch_idx} | y min {y.min():.3f}, max {y.max():.3f}, mean {y.mean():.3f}")
+            print(f"Batch {batch_idx} | preds min {preds.min():.3f}, max {preds.max():.3f}, mean {preds.mean():.3f}")
+
+    # Evaluation
     model.eval()
     test_loss = 0
     with torch.no_grad():
-        for x, y in test_loader:
+        for batch_idx, (x, y) in enumerate(test_loader):
             x, y = x.to(device), y.to(device)
             preds = model(x)
             loss = criterion(preds, y)
             test_loss += loss.item() * len(x)
 
-    print(f"Epoch {epoch+1} | Train Loss {train_loss/len(train_data):.6f} | Test Loss {test_loss/len(test_data):.6f}")
+            # Check first batch stats
+            if batch_idx == 0:
+                print(f"[Eval] Batch {batch_idx} | x min {x.min():.3f}, max {x.max():.3f}, mean {x.mean():.3f}")
+                print(f"[Eval] Batch {batch_idx} | y min {y.min():.3f}, max {y.max():.3f}, mean {y.mean():.3f}")
+                print(f"[Eval] Batch {batch_idx} | preds min {preds.min():.3f}, max {preds.max():.3f}, mean {preds.mean():.3f}")
+
+    print(f"Epoch {epoch+1} | Train Loss {train_loss/len(train_data):.6f} | "
+          f"Test Loss {test_loss/len(test_data):.6f}")

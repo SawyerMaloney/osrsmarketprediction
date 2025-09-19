@@ -7,3 +7,7 @@ Death rune                   560
 Blood rune                   565
 
 Going to need around 7-10k timesteps, which will probably require some rate limiting
+
+
+Ordering of items:
+'12934', '2434', '3024', '385', '560', '561', '565'
