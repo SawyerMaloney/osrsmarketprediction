@@ -187,10 +187,10 @@ class RuneScapePricesAPI:
         # now update item_timeseries
         self.item_timeseries = arr_normalized
 
-    def save_numpy(self):
-        np.save("timeseries.npy", self.item_timeseries)
+    def save_numpy(self, filename="timeseries.npy"):
+        np.save(filename, self.item_timeseries)
 
-    def load_numpy(self, filename):
+    def load_numpy(self, filename="timeseries.npy"):
         try:
             self.item_timeseries = np.load(filename)
         except Exception as e:
@@ -207,12 +207,11 @@ class RuneScapePricesAPI:
         self.clean_data()
         self.convert_timeseries_to_numpy()
         self.remove_timestamp()
+        self.normalize_data()
         self.save_numpy()
 
 if __name__ == "__main__":
     api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
+    api.load_clean_convert_normalize()
     api.load_numpy("timeseries.npy")
-    for timestep in api.item_timeseries:
-        for item in timestep:
-            if 0 in item or None in item:
-                print(item)
+    print(api.item_timeseries[:10])
