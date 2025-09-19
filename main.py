@@ -208,21 +208,26 @@ class RuneScapePricesAPI:
         # now update item_timeseries
         self.item_timeseries = arr_normalized
 
+    def save_numpy(self):
+        np.save("timeseries.npy", self.item_timeseries)
+
+    def load_numpy(self, filename):
+        try:
+            self.item_timeseries = np.load(filename)
+        except Exception as e:
+            print(f"failed to load from numpy binary {filename} with error {e}")
+
+    def load_clean_convert_normalize(self):
+        self.load_data()
+        self.clean_data()
+        self.convert_timeseries_to_numpy()
+        self.remove_timestamp_from_timeseries()
+        self.save_numpy()
+
+
 
 
 if __name__ == "__main__":
     api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
-    api.load_data()
+    api.load_numpy("timeseries.npy")
     api.print_statistics()
-    print(api.item_timeseries[0][0])
-    api.check_data()
-    print("=====================        Running clean_data          =====================")
-    api.clean_data()
-    api.print_statistics()
-    api.check_data()
-
-    api.convert_timeseries_to_numpy()
-    api.remove_timestamp_from_timeseries()
-    print(api.item_timeseries[0][0])
-    print(api.item_timeseries.shape)
-
