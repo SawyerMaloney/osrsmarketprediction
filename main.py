@@ -24,13 +24,12 @@ class RuneScapePricesAPI:
             "Accept": "application/json"
         })
 
-    def get_price(self, item_id: int, timestamp: int, **kwargs) -> Optional[Dict[str, Any]]:
+    def get_price(self, timestamp: int, **kwargs) -> Optional[Dict[str, Any]]:
         """
         Fetch real-time price for a given item.
 
-        :param item_id: The ID of the item to query.
-        :param kwargs: Any extra parameters the API supports.
-        :return: Parsed JSON with price data, or None if error.
+        timestamp - unix timestamp in seconds
+        return - Parsed JSON with price data, or None if error.
         """
 
         # make sure timestamp is valid
@@ -61,8 +60,15 @@ class RuneScapePricesAPI:
         return data, timestamp
     
     def remove_nontracked_items(self, data, timestamp):
-        # remove non-tracked items from hourly data returned from api call
-        # returns dict of tracked item ids and their (avgHigh, avgLow, highVol, lowVol)
+        """
+            remove non-tracked items from hourly data returned from api call
+            returns dict of tracked item ids and their (avgHigh, avgLow, highVol, lowVol)
+
+            data - dictionary returned from get_price
+            timestamp -unix timestamp in seconds
+            return - dict of item ids and values
+        """
+        
         tracked_items = {}
         for key in data["data"].keys():
             if key in self.item_ids.values():
@@ -71,16 +77,48 @@ class RuneScapePricesAPI:
                 tracked_items[key] = _
 
         return tracked_items
+    
+    def request_num_hours(self, timestamp, num_hours):
+        """
+            Request a certain of hours back from (and including) timestamp
 
+            timestamp - unix timestamp
+            num_hours - int 
+        """
 
-def main():
-    api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
-    item_id = 12934  # example: Abyssal whip, just illustrative
-    result, timestamp = api.get_price(item_id, int(time.time()) - 7200)
-    with open("results.json", "w") as f:
-        json.dump(result, f)
-    with open("cleaned_results.json", "w") as f:
-        json.dump(api.remove_nontracked_items(result, timestamp), f)
+        timestamps = [timestamp - _ for _ in range(num_hours)]
+
+        for ts in timestamps:
+            data = self.get_price(ts)
+            data = self.remove_nontracked_items(data)
+
+    def organize_into_array(self, data):
+        """
+            Organize data from remove_untracked into an array for training
+        """
+        keys = sorted(self.item_ids.values())
+        d = []
+        for key in keys:
+            d.append(list(data[key].values()))
+        return d
+
+    
+    def get_current_time(self):
+        # returns the current time set back at least one hour (3600 seconds)
+        # so that the api endpoint will work
+        now = time.time()
+        now = (now - 3600) - (now % 3600)
+        return int(now)
+    
+    def get_data(self):
+        result, timestamp = self.get_price(self.get_current_time())
+        with open("results.json", "w") as f:
+            json.dump(result, f)
+        with open("cleaned_results.json", "w") as f:
+            json.dump(self.remove_nontracked_items(result, timestamp), f)
+        print(self.organize_into_array(self.remove_nontracked_items(result, timestamp)))
+
 
 if __name__ == "__main__":
-    main()
+    api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
+    api.get_data()

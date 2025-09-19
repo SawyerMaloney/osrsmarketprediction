@@ -5,13 +5,3 @@ Sharks                       385
 Nature rune                  561
 Death rune                   560
 Blood rune                   565
-
-https://api.weirdgloop.org/exchange/history/osrs/all?id=
-
-The item IDs to lookup, or a trade index, such as 
-'GE Common Trade Index'. You can specify multiple IDs 
-by separating them with a pipe (|), subject to limits.
-
-https://prices.runescape.wiki/api/v1/osrs/1h?timestamp=1615734000
-https://prices.runescape.wiki/api/v1/osrs/1h?timestamp=1758257000
-
