@@ -2,10 +2,14 @@ import requests
 import time
 from typing import Dict, Any, Optional
 import json
+import numpy as np
 
 class RuneScapePricesAPI:
     """
-    Client for querying RuneScape real-time price data.
+        Client for querying RuneScape real-time price data and preparing that data for training
+        
+        item_timeseries:    time x items x item
+                            7000 x 7 x 6
     """
 
     item_ids = {"Zulrah's Scales": "12934", "Super Restore": "3024", "Prayer Potion": "2434", "Shark": "385", "Nature Rune": "561", "Death Rune": "560", "Blood Rune": "565"}
@@ -130,7 +134,95 @@ class RuneScapePricesAPI:
         with open("timeseries.json", "w") as f:
             json.dump(self.item_timeseries, f)
 
+    def load_data(self):
+        with open("timeseries.json", "r") as f:
+            self.item_timeseries = json.load(f)
+
+    def convert_timeseries_to_numpy(self):
+        self.item_timeseries = np.array(self.item_timeseries)
+
+    def clean_data(self, data=""):
+        """
+            Remove columns that have an abnormal number of items
+            Remove all None values and replace them with np.nan value
+            (Recurvsively :))
+        """
+        if data == "":
+            data = self.item_timeseries
+
+        # print(f"clean_data run on:")
+        # print(data)
+        length = len(self.item_ids.values())
+        self.item_timeseries = [timestep for timestep in self.item_timeseries if len(timestep) == length] 
+        self.item_timeseries = self.remove_none_vals(self.item_timeseries)
+
+
+    def remove_none_vals(self, data):
+        if isinstance(data, list):
+            return [self.remove_none_vals(d) for d in data]
+        elif data is None:
+            return np.nan
+        else:
+            return data
+
+    def check_data(self):
+        for t in self.item_timeseries:
+            for item in t:
+                if None in item or np.nan in item:
+                    print(item)
+
+        print("Checking length of all subarrays")
+        length = len(self.item_timeseries[0])
+        for t in self.item_timeseries:
+            if len(t) != length:
+                print(t)
+
+    def print_statistics(self):
+        print(f"Number of timesteps: {len(self.item_timeseries)}")
+        print(f"Number of tracked items: {len(self.item_timeseries[0])}")
+
+    def remove_timestamp_from_timeseries(self):
+        self.item_timeseries = self.item_timeseries[:, :, :4]
+
+    def normalize_data(self):
+        """
+            Steps:
+                - log transform to better represent heavy-tailed distributions
+                - normalize mean and std
+        """
+
+        arr_log = np.log1p(self.item_timeseries)
+
+        timeseries, items, features = self.arr_log.shape
+        arr2d = arr_log.reshape(-1, features)
+        # compute mean and std per feature
+        mean = arr_2d.mean(axis=0)
+        std = arr_2d.std(axis=0)
+
+        # normalize
+        arr_normalized = (arr_2d - mean) / std
+
+        # reshape back to original shape
+        arr_normalized = arr_normalized.reshape(timesteps, items, features)
+
+        # now update item_timeseries
+        self.item_timeseries = arr_normalized
+
+
 
 if __name__ == "__main__":
     api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
-    api.get_data()
+    api.load_data()
+    api.print_statistics()
+    print(api.item_timeseries[0][0])
+    api.check_data()
+    print("=====================        Running clean_data          =====================")
+    api.clean_data()
+    api.print_statistics()
+    api.check_data()
+
+    api.convert_timeseries_to_numpy()
+    api.remove_timestamp_from_timeseries()
+    print(api.item_timeseries[0][0])
+    print(api.item_timeseries.shape)
+
