@@ -8,22 +8,33 @@ import matplotlib.pyplot as plt
 # Dataset
 # ---------------------------
 class TimeSeriesDataset(Dataset):
-    def __init__(self, arr, seq_len=32, horizon=5, target_scale=100.0, clip_inputs=True, clip_value=5.0):
+    def __init__(self, arr, seq_len=32, horizon=5, target_scale=100.0,
+                 clip_inputs=True, clip_value=5.0, target_item=0):
         """
         arr: numpy array of shape (timesteps, items, features)
-        seq_len: number of past steps fed into the model
+        target_item: which item (0..N-1) to predict
         """
+        self.arr = arr.astype(np.float32)
         self.seq_len = seq_len
         self.horizon = horizon
+        self.target_item = target_item
 
-        # -------------------
-        # Normalize inputs
-        # -------------------
-        arr = arr.astype(np.float32)
-        timesteps, items, features = arr.shape
-        arr_2d = arr.reshape(-1, features)
+        # ---------------------------
+        # Compute log returns for target item
+        # ---------------------------
+        prices = self.arr[:, target_item, 0]
+        prices = np.clip(prices, 1e-8, None)
+        log_prices = np.log(prices)
+        self.log_returns = np.diff(log_prices, prepend=log_prices[0])
+        self.log_returns *= target_scale
+        self.log_returns = np.clip(self.log_returns, -5*target_scale, 5*target_scale)
 
-        mean = arr_2d.mean(axis=0)  # FIXED: use mean, not std
+        # ---------------------------
+        # Normalize input features
+        # ---------------------------
+        timesteps, items, features = self.arr.shape
+        arr_2d = self.arr.reshape(-1, features)
+        mean = arr_2d.mean(axis=0)
         std = arr_2d.std(axis=0) + 1e-8
         arr_normalized = (arr_2d - mean) / std
         arr_normalized = arr_normalized.reshape(timesteps, items, features)
@@ -32,24 +43,9 @@ class TimeSeriesDataset(Dataset):
             arr_normalized = np.clip(arr_normalized, -clip_value, clip_value)
         self.arr = arr_normalized
 
-        # -------------------
-        # Compute log returns for target
-        # -------------------
-        prices = arr[:, 0, 0]
-        prices = np.clip(prices, a_min=1e-8, a_max=None)
-        log_prices = np.log(prices)
-        log_returns = np.diff(log_prices, prepend=log_prices[0])
-        log_returns *= target_scale
-
-        # Optional clipping
-        log_returns = np.clip(log_returns, -5*target_scale, 5*target_scale)
-
-        # -------------------
-        # Normalize targets
-        # -------------------
-        self.y_mean = log_returns.mean()
-        self.y_std = log_returns.std() + 1e-8
-        self.log_returns = (log_returns - self.y_mean) / self.y_std
+        # Save stats for rescaling later
+        self.y_mean = np.mean(self.log_returns)
+        self.y_std  = np.std(self.log_returns) + 1e-8
 
     def __len__(self):
         return len(self.arr) - self.seq_len - self.horizon + 1
@@ -58,6 +54,7 @@ class TimeSeriesDataset(Dataset):
         x = self.arr[idx:idx+self.seq_len]
         y = self.log_returns[idx+self.seq_len + (self.horizon-1)]
         return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
+
 
 
 # ---------------------------
@@ -77,42 +74,52 @@ class LSTMModel(nn.Module):
         return self.fc(out).squeeze(-1)
 
 
-# ---------------------------
-# Example training snippet
-# ---------------------------
+# ------------------------
+#   Setting up model and datasets
+# ------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 arr = np.load("timeseries.npy")
-
-# Split
-split = int(0.8 * len(arr))
-train_dataset = TimeSeriesDataset(arr[:split])
-test_dataset  = TimeSeriesDataset(arr[split:])
-
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-test_loader  = DataLoader(test_dataset, batch_size=64, shuffle=False)
-
-input_size = arr.shape[1] * arr.shape[2]
-model = LSTMModel(input_size).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-criterion = nn.SmoothL1Loss()
 
 # ---------------------------
 # Hyperparameters
 # ---------------------------
+target_item = 1  # second item
+horizon = 2      # based on top performing results
+seq_len = 32
 num_epochs = 30
-batch_size = 32  # smaller batch to avoid averaging out spikes
-threshold = 2.0  # threshold for spikes in normalized targets
-spike_weight = 5.0  # weight for spike points
+batch_size = 32
+hidden_size = 128
+num_layers = 4
+lr = 1e-3
+threshold = 2.0
+spike_weight = 5.0
 
-# Update DataLoaders for new batch size
+# ---------------------------
+# Dataset / DataLoader
+# ---------------------------
+train_dataset = TimeSeriesDataset(arr[:int(0.8*len(arr))],
+                                  horizon=horizon,
+                                  target_item=target_item,
+                                  seq_len=seq_len)
+test_dataset  = TimeSeriesDataset(arr[int(0.8*len(arr)):],
+                                  horizon=horizon,
+                                  target_item=target_item,
+                                  seq_len=seq_len)
+
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+test_loader  = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+# ---------------------------
+# Model / optimizer / criterion
+# ---------------------------
+input_size = arr.shape[1] * arr.shape[2]
+model = LSTMModel(input_size, hidden_size=hidden_size, num_layers=num_layers).to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 # ---------------------------
 # Training loop with threshold-weighted MSE
 # ---------------------------
 for epoch in range(num_epochs):
-    # Training
     model.train()
     train_loss_total = 0.0
     for x, y in train_loader:
@@ -120,12 +127,8 @@ for epoch in range(num_epochs):
         optimizer.zero_grad()
         preds = model(x)
 
-        # ---------------------------
-        # Threshold-based weights for spikes
-        # ---------------------------
         weights = torch.ones_like(y)
         weights[torch.abs(y) > threshold] = spike_weight
-
         loss = (weights * (preds - y)**2).mean()
         loss.backward()
         optimizer.step()
@@ -133,7 +136,9 @@ for epoch in range(num_epochs):
 
     train_loss_epoch = train_loss_total / len(train_dataset)
 
+    # ---------------------------
     # Evaluation
+    # ---------------------------
     model.eval()
     test_loss_total = 0.0
     with torch.no_grad():
@@ -160,6 +165,7 @@ with torch.no_grad():
     for x, y in test_loader:
         x, y = x.to(device), y.to(device)
         preds = model(x)
+        # Rescale to original target scale
         preds_real = preds * train_dataset.y_std + train_dataset.y_mean
         y_real = y * train_dataset.y_std + train_dataset.y_mean
         all_preds.append(preds_real.cpu().numpy())
@@ -168,11 +174,10 @@ with torch.no_grad():
 all_preds = np.concatenate(all_preds)
 all_true = np.concatenate(all_true)
 
-import matplotlib.pyplot as plt
 plt.figure(figsize=(12,5))
 plt.plot(all_true, label="True")
 plt.plot(all_preds, label="Predicted")
-plt.title("Test Set: True vs Predicted Targets (Spike-Weighted)")
+plt.title(f"Item {target_item} Predictions (Horizon {horizon})")
 plt.xlabel("Time step")
 plt.ylabel("Target (rescaled)")
 plt.legend()
