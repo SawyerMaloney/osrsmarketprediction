@@ -193,14 +193,14 @@ class RuneScapePricesAPI:
 
         arr_log = np.log1p(self.item_timeseries)
 
-        timeseries, items, features = self.arr_log.shape
+        timesteps, items, features = self.arr_log.shape
         arr2d = arr_log.reshape(-1, features)
         # compute mean and std per feature
-        mean = arr_2d.mean(axis=0)
-        std = arr_2d.std(axis=0)
+        mean = arr2d.mean(axis=0)
+        std = arr2d.std(axis=0)
 
         # normalize
-        arr_normalized = (arr_2d - mean) / std
+        arr_normalized = (arr2d - mean) / std
 
         # reshape back to original shape
         arr_normalized = arr_normalized.reshape(timesteps, items, features)
