@@ -51,12 +51,10 @@ class RuneScapePricesAPI:
         print(f"requested {response.url}")
         try:
             data = response.json()
-        except ValueError as e:
+        except Exception as e:
             print(f"Error decoding JSON: {e}")
             return None
 
-        # TODO: adapt this based on the actual response structure
-        # Example: suppose the response has something like {"price": {...}}
         return data, timestamp
     
     def remove_nontracked_items(self, data, timestamp):
@@ -86,11 +84,17 @@ class RuneScapePricesAPI:
             num_hours - int 
         """
 
-        timestamps = [timestamp - _ for _ in range(num_hours)]
+        timestamps = [timestamp - (_ * 3600) for _ in range(num_hours)]
+        timeseries = []
+
+        print(f"querying timestamps: {timestamps}")
 
         for ts in timestamps:
-            data = self.get_price(ts)
-            data = self.remove_nontracked_items(data)
+            data, _ts = self.get_price(ts)
+            data = self.remove_nontracked_items(data, ts)
+            timeseries.append(self.organize_into_array(data))
+
+        return timeseries
 
     def organize_into_array(self, data):
         """
@@ -99,7 +103,11 @@ class RuneScapePricesAPI:
         keys = sorted(self.item_ids.values())
         d = []
         for key in keys:
-            d.append(list(data[key].values()))
+            try:
+                d.append(list(data[key].values()))
+            except Exception as e:
+                print(f"error in organize_into_array. key {key}")
+                print(e)
         return d
 
     
@@ -117,6 +125,10 @@ class RuneScapePricesAPI:
         with open("cleaned_results.json", "w") as f:
             json.dump(self.remove_nontracked_items(result, timestamp), f)
         print(self.organize_into_array(self.remove_nontracked_items(result, timestamp)))
+
+        self.item_timeseries = self.request_num_hours(self.get_current_time(), 7000)
+        with open("timeseries.json", "w") as f:
+            json.dump(self.item_timeseries, f)
 
 
 if __name__ == "__main__":

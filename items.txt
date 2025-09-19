@@ -5,3 +5,5 @@ Sharks                       385
 Nature rune                  561
 Death rune                   560
 Blood rune                   565
+
+Going to need around 7-10k timesteps, which will probably require some rate limiting
