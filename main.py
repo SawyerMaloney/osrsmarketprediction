@@ -58,24 +58,29 @@ class RuneScapePricesAPI:
 
         # TODO: adapt this based on the actual response structure
         # Example: suppose the response has something like {"price": {...}}
-        return data
+        return data, timestamp
     
-    def remove_nontracked_items(self, data):
+    def remove_nontracked_items(self, data, timestamp):
         # remove non-tracked items from hourly data returned from api call
         # returns dict of tracked item ids and their (avgHigh, avgLow, highVol, lowVol)
         tracked_items = {}
-        
-        for key in data["data"].keys:
-            if key in self.item_ids.keys():
-                tracked_items[key] = data["data"][key]
+        for key in data["data"].keys():
+            if key in self.item_ids.values():
+                _ = data["data"][key]
+                _["timestamp"] = timestamp
+                tracked_items[key] = _
+
+        return tracked_items
 
 
 def main():
     api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
     item_id = 12934  # example: Abyssal whip, just illustrative
-    result = api.get_price(item_id, int(time.time()) - 7200)
+    result, timestamp = api.get_price(item_id, int(time.time()) - 7200)
     with open("results.json", "w") as f:
         json.dump(result, f)
+    with open("cleaned_results.json", "w") as f:
+        json.dump(api.remove_nontracked_items(result, timestamp), f)
 
 if __name__ == "__main__":
     main()
