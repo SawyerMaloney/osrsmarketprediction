@@ -11,22 +11,18 @@ class TimeSeriesDataset(Dataset):
         """
         self.arr = arr
         self.seq_len = seq_len
+        self.horizon = horizon
 
         # Use first item's first feature as price series
         prices = arr[:, 0, 0]  # shape: (timesteps,)
-        self.log_returns = np.diff(np.log(prices + 1e-8))  # avoid log(0)
+        self.log_returns = np.diff(np.log(prices + 1e-8), prepend=np.nan)  # avoid log(0)
 
     def __len__(self):
-        # -1 because log_return has one fewer element
-        return len(self.arr) - self.seq_len - 1  
+        return len(self.arr) - self.seq_len - self.horizon + 1
 
     def __getitem__(self, idx):
-        # Input sequence (seq_len timesteps of all items/features)
         x = self.arr[idx:idx+self.seq_len]
-
-        # Target = log return at the NEXT step
         y = self.log_returns[idx+self.seq_len + (self.horizon-1)]
-
         return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
 
 
@@ -50,6 +46,10 @@ class LSTMModel(nn.Module):
         out = out[:, -1, :]     # last timestep
         return self.fc(out).squeeze(-1)  # (batch,)
     
+# check if cuda is available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", device)
+    
 # Load data
 arr = np.load("timeseries.npy")   # shape (timesteps, items, features)
 
@@ -66,6 +66,7 @@ items, features = arr.shape[1], arr.shape[2]
 input_size = items * features
 
 model = LSTMModel(input_size)
+model = model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 criterion = nn.MSELoss()
 
@@ -74,6 +75,8 @@ for epoch in range(30):
     model.train()
     train_loss = 0
     for x, y in train_loader:
+        x = x.to(device)
+        y = y.to(device)
         optimizer.zero_grad()
         preds = model(x)
         loss = criterion(preds, y)
@@ -86,6 +89,7 @@ for epoch in range(30):
     test_loss = 0
     with torch.no_grad():
         for x, y in test_loader:
+            x, y = x.to(device), y.to(device)
             preds = model(x)
             loss = criterion(preds, y)
             test_loss += loss.item() * len(x)
