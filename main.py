@@ -74,9 +74,7 @@ class RuneScapePricesAPI:
         tracked_items = {}
         for key in data["data"].keys():
             if key in self.item_ids.values():
-                _ = data["data"][key]
-                _["timestamp"] = timestamp
-                tracked_items[key] = _
+                tracked_items[key] = data["data"][key]
 
         return tracked_items
     
@@ -161,28 +159,9 @@ class RuneScapePricesAPI:
         if isinstance(data, list):
             return [self.remove_none_vals(d) for d in data]
         elif data is None:
-            return np.nan
+            return 0
         else:
             return data
-
-    def check_data(self):
-        for t in self.item_timeseries:
-            for item in t:
-                if None in item or np.nan in item:
-                    print(item)
-
-        print("Checking length of all subarrays")
-        length = len(self.item_timeseries[0])
-        for t in self.item_timeseries:
-            if len(t) != length:
-                print(t)
-
-    def print_statistics(self):
-        print(f"Number of timesteps: {len(self.item_timeseries)}")
-        print(f"Number of tracked items: {len(self.item_timeseries[0])}")
-
-    def remove_timestamp_from_timeseries(self):
-        self.item_timeseries = self.item_timeseries[:, :, :4]
 
     def normalize_data(self):
         """
@@ -193,7 +172,7 @@ class RuneScapePricesAPI:
 
         arr_log = np.log1p(self.item_timeseries)
 
-        timesteps, items, features = self.arr_log.shape
+        timesteps, items, features = self.item_timeseries.shape
         arr2d = arr_log.reshape(-1, features)
         # compute mean and std per feature
         mean = arr2d.mean(axis=0)
@@ -217,17 +196,23 @@ class RuneScapePricesAPI:
         except Exception as e:
             print(f"failed to load from numpy binary {filename} with error {e}")
 
+    def remove_timestamp(self):
+        """
+            Helper function to remove timestamp that we appended on the timeseries
+        """
+        self.item_timeseries = self.item_timeseries[:, :, :4]
+
     def load_clean_convert_normalize(self):
         self.load_data()
         self.clean_data()
         self.convert_timeseries_to_numpy()
-        self.remove_timestamp_from_timeseries()
+        self.remove_timestamp()
         self.save_numpy()
-
-
-
 
 if __name__ == "__main__":
     api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
     api.load_numpy("timeseries.npy")
-    api.print_statistics()
+    for timestep in api.item_timeseries:
+        for item in timestep:
+            if 0 in item or None in item:
+                print(item)

@@ -74,6 +74,15 @@ criterion = nn.MSELoss()
 for epoch in range(30):
     model.train()
     train_loss = 0
+    for batch_idx, (x, y) in enumerate(train_loader):
+        if torch.isnan(x).any() or torch.isnan(y).any():
+            print(f"NaNs in batch {batch_idx}")
+        if torch.isinf(x).any() or torch.isinf(y).any():
+            print(f"Infs in batch {batch_idx}")
+        print(f"x stats: min={x.min().item():.3f}, max={x.max().item():.3f}, mean={x.mean().item():.3f}")
+        print(f"y stats: min={y.min().item():.3f}, max={y.max().item():.3f}, mean={y.mean().item():.3f}")
+        break  # only first batch for inspection
+
     for x, y in train_loader:
         x = x.to(device)
         y = y.to(device)
