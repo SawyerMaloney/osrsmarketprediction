@@ -79,7 +79,7 @@ class RuneScapePricesAPI:
 
         return tracked_items
     
-    def request_num_hours(self, timestamp, num_hours):
+    def request_num_hours(self, timestamp, num_hours, remove_untracked=True):
         """
             Request a certain of hours back from (and including) timestamp
 
@@ -94,24 +94,37 @@ class RuneScapePricesAPI:
 
         for ts in timestamps:
             data, _ts = self.get_price(ts)
-            data = self.remove_nontracked_items(data, ts)
-            timeseries.append(self.organize_into_array(data))
+            if remove_untracked:
+                data = self.remove_nontracked_items(data, ts)
+            timeseries.append(self.organize_into_array(data, remove_untracked))
 
         return timeseries
 
-    def organize_into_array(self, data):
+    def organize_into_array(self, data, remove_untracked=True):
         """
             Organize data from remove_untracked into an array for training
         """
-        keys = sorted(self.item_ids.values())
-        d = []
-        for key in keys:
-            try:
-                d.append(list(data[key].values()))
-            except Exception as e:
-                print(f"error in organize_into_array. key {key}")
-                print(e)
-        return d
+        if remove_untracked:
+            keys = sorted(self.item_ids.values())
+            d = []
+            for key in keys:
+                try:
+                    d.append(list(data[key].values()))
+                except Exception as e:
+                    print(f"error in organize_into_array. key {key}")
+                    print(e)
+            return d
+        else:
+            print(data.keys())
+            print(data["data"])
+            keys = sorted(data["data"].keys())
+            with open("keys.txt", "w") as f:
+                f.write(str(keys))
+            d = []
+            for key in keys:
+                print(f"Appending data from key {key}.")
+                d.append(data["data"][key])
+            return d
 
     
     def get_current_time(self):
@@ -127,9 +140,8 @@ class RuneScapePricesAPI:
             json.dump(result, f)
         with open("cleaned_results.json", "w") as f:
             json.dump(self.remove_nontracked_items(result, timestamp), f)
-        print(self.organize_into_array(self.remove_nontracked_items(result, timestamp)))
 
-        self.item_timeseries = self.request_num_hours(self.get_current_time(), 7000)
+        self.item_timeseries = self.request_num_hours(self.get_current_time(), 24, remove_untracked=False)
         with open("timeseries.json", "w") as f:
             json.dump(self.item_timeseries, f)
 
@@ -164,30 +176,6 @@ class RuneScapePricesAPI:
         else:
             return data
 
-    def normalize_data(self):
-        """
-            Steps:
-                - log transform to better represent heavy-tailed distributions
-                - normalize mean and std
-        """
-
-        arr_log = np.log1p(self.item_timeseries)
-
-        timesteps, items, features = self.item_timeseries.shape
-        arr2d = arr_log.reshape(-1, features)
-        # compute mean and std per feature
-        mean = arr2d.mean(axis=0)
-        std = arr2d.std(axis=0)
-
-        # normalize
-        arr_normalized = (arr2d - mean) / std
-
-        # reshape back to original shape
-        arr_normalized = arr_normalized.reshape(timesteps, items, features)
-
-        # now update item_timeseries
-        self.item_timeseries = arr_normalized
-
     def save_numpy(self, filename="timeseries.npy"):
         np.save(filename, self.item_timeseries)
 
@@ -197,71 +185,6 @@ class RuneScapePricesAPI:
         except Exception as e:
             print(f"failed to load from numpy binary {filename} with error {e}")
 
-    def remove_timestamp(self):
-        """
-            Helper function to remove timestamp that we appended on the timeseries
-        """
-        self.item_timeseries = self.item_timeseries[:, :, :4]
-
-    def load_clean_convert(self):
-        self.load_data()
-        self.clean_data()
-        self.convert_timeseries_to_numpy()
-        self.remove_timestamp()
-        self.save_numpy()
-
 if __name__ == "__main__":
     api = RuneScapePricesAPI(user_agent="MyRuneApp/1.0")
-    api.load_numpy("timeseries.npy")
-    print(api.item_timeseries[:10])
-    print(api.item_timeseries.shape)
-
-    arr = api.item_timeseries
-
-    item_idx = 0  # first tracked item
-    feature_idx = 0  # choose the feature you care about, e.g., price
-
-    # Extract the series
-    series = arr[:, item_idx, feature_idx]  # shape (timesteps,)
-
-    # -------------------------
-    # 1. Plot the entire series
-    # -------------------------
-    plt.figure(figsize=(15, 4))
-    plt.plot(series, label=f"Item {item_idx}, Feature {feature_idx}")
-    plt.title("Full Timeseries")
-    plt.xlabel("Timestep (hourly)")
-    plt.ylabel("Value")
-    plt.legend()
-    plt.show()
-
-    # -------------------------
-    # 2. Plot a zoomed-in portion (optional)
-    # -------------------------
-    start, end = 6500, 6800  # adjust to zoom into a specific window
-    plt.figure(figsize=(15, 4))
-    plt.plot(series[start:end], label=f"Zoomed: {start}–{end}")
-    plt.title("Zoomed Timeseries")
-    plt.xlabel("Timestep")
-    plt.ylabel("Value")
-    plt.legend()
-    plt.show()
-
-    # -------------------------
-    # 3. Plot histogram to see distribution
-    # -------------------------
-    plt.figure(figsize=(8, 4))
-    plt.hist(series, bins=100)
-    plt.title("Histogram of Timeseries Values")
-    plt.xlabel("Value")
-    plt.ylabel("Frequency")
-    plt.show()
-
-    start, end = 4300, 4500  # adjust to match a suspected spike
-    plt.figure(figsize=(15, 4))
-    plt.plot(series[start:end], label=f"Item 0, Feature 0 Zoom")
-    plt.title("Zoomed Timeseries Around Spike")
-    plt.xlabel("Timestep")
-    plt.ylabel("Value")
-    plt.legend()
-    plt.show()
+    api.get_data()
